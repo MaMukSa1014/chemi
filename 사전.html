@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>실시간 은어 사전 & 게시판</title>
+    <!-- Tailwind CSS 로드 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts (Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Lucide 아이콘 -->
+    <script src="https://unpkg.com/lucide-react@latest/dist/umd/lucide.min.js"></script>
+    <style>
+        /* Noto Sans KR 폰트 우선 적용 */
+        body {
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+            overscroll-behavior: none; /* 스크롤 당김 효과(바운스) 제거 */
+        }
+        /* Lucide 아이콘 크기 및 정렬 기본값 */
+        .lucide {
+            width: 1em;
+            height: 1em;
+            vertical-align: -0.125em;
+        }
+        /* 스크롤바 숨기기 (Chrome, Safari, Opera) */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        /* 스크롤바 숨기기 (IE, Edge, Firefox) */
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+        /* 활성 탭 스타일 */
+        .tab-button.active {
+            border-bottom-color: #3b82f6; /* blue-500 */
+            color: #3b82f6;
+            font-weight: 600;
+        }
+        /* 비활성 탭 스타일 */
+        .tab-button {
+            border-bottom-color: transparent;
+            color: #6b7280; /* gray-500 */
+        }
+        /* 메인 탭 활성 */
+        .main-tab.active {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+        }
+        .main-tab {
+            background-color: #374151; /* gray-700 */
+            color: #d1d5db; /* gray-300 */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 h-screen antialiased">
+
+    <!-- 비밀번호 입력 화면 -->
+    <div id="passwordScreen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900">
+        <div class="w-full max-w-xs p-6 bg-gray-800 rounded-lg shadow-xl">
+            <h2 class="text-xl font-bold text-white text-center mb-4">비밀번호 입력</h2>
+            <form id="passwordForm">
+                <input 
+                    type="password" 
+                    id="passwordInput"
+                    class="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="비밀번호"
+                >
+                <p id="passwordError" class="text-red-400 text-xs text-center mt-2 h-4"></p>
+                <button 
+                    type="submit"
+                    class="w-full mt-4 px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors"
+                >
+                    입장
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 메인 앱 컨텐츠 (초기 숨김) -->
+    <div id="appContainer" class="hidden h-screen flex flex-col max-w-2xl mx-auto bg-gray-800 shadow-xl">
+        
+        <!-- 헤더 -->
+        <header class="bg-gray-900 shadow-md p-4 flex justify-between items-center z-10">
+            <h1 class="text-2xl font-bold text-white">
+                <i data-lucide="book-marked" class="inline-block text-blue-400"></i>
+                <span id="headerTitle">은어 사전</span>
+            </h1>
+            <div id="headerActions">
+                <!-- 은어사전용 버튼 -->
+                <button id="addWordButton" class="main-action-button bg-blue-600 text-white px-3 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center shadow">
+                    <i data-lucide="plus" class="mr-1 h-5 w-5"></i>새 은어
+                </button>
+                <!-- 게시판용 버튼 (초기 숨김) -->
+                <button id="addPostButton" class="main-action-button hidden bg-green-600 text-white px-3 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center shadow">
+                    <i data-lucide="plus" class="mr-1 h-5 w-5"></i>새 글 작성
+                </button>
+            </div>
+        </header>
+
+        <!-- 메인 탭 네비게이션 -->
+        <nav class="bg-gray-900 p-2 shadow-inner">
+            <div class="grid grid-cols-2 gap-2">
+                <button class="main-tab py-2 px-4 rounded-md font-semibold text-sm transition-colors active" data-main-tab="dictionary">
+                    <i data-lucide="book-open" class="mr-1"></i> 은어사전
+                </button>
+                <button class="main-tab py-2 px-4 rounded-md font-semibold text-sm transition-colors" data-main-tab="board">
+                    <i data-lucide="message-square" class="mr-1"></i> 자유게시판
+                </button>
+            </div>
+        </nav>
+
+        <!-- 컨텐츠 영역 -->
+        <main class="flex-1 overflow-y-auto no-scrollbar p-4 bg-gray-800">
+            
+            <!-- 1. 은어 사전 컨텐츠 -->
+            <div id="dictionaryContent" class="main-content-panel">
+                <!-- 검색창 -->
+                <div class="mb-4 sticky top-0 bg-gray-800 py-2">
+                    <div class="relative">
+                        <input 
+                            type="search" 
+                            id="searchInput" 
+                            placeholder="검색 (단어, 초성, 뜻)..."
+                            class="w-full pl-10 pr-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i data-lucide="search" class="text-gray-400"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 은어  사전 탭 -->
+                <div class="border-b border-gray-700 mb-4 flex">
+                    <button class="tab-button flex-1 py-2 px-3 text-sm font-medium text-center border-b-2 active" data-tab="latest">
+                        <i data-lucide="clock" class="mr-1"></i>최신순
+                    </button>
+                    <button class="tab-button flex-1 py-2 px-3 text-sm font-medium text-center border-b-2" data-tab="alphabetical">
+                        <i data-lucide="a-large-small" class="mr-1"></i>가나다순
+                    </button>
+                    <button class="tab-button flex-1 py-2 px-3 text-sm font-medium text-center border-b-2" data-tab="mine">
+                        <i data-lucide="user" class="mr-1"></i>내가 쓴 글
+                    </button>
+                </div>
+
+                <!-- 단어 목록 -->
+                <div id="wordList" class="space-y-3">
+                    <!-- JS로 동적 생성 -->
+                </div>
+                
+                <!-- '데이터 없음' 상태 -->
+                <div id="emptyState" class="hidden text-center text-gray-500 pt-10">
+                    <i data-lucide="database-zap" class="h-12 w-12 mx-auto mb-2"></i>
+                    <p class="font-semibold" id="emptyStateMessage">표시할 단어가 없습니다.</p>
+                    <p class="text-sm">새 은어를 등록해보세요!</p>
+                </div>
+            </div>
+
+            <!-- 2. 자유 게시판 컨텐츠 (초기 숨김) -->
+            <div id="boardContent" class="main-content-panel hidden">
+                <!-- 게시글 목록 -->
+                <div id="postList" class="space-y-3">
+                    <!-- JS로 동적 생성 -->
+                </div>
+                
+                <!-- '게시글 없음' 상태 -->
+                <div id="emptyPostState" class="hidden text-center text-gray-500 pt-10">
+                    <i data-lucide="message-square-dashed" class="h-12 w-12 mx-auto mb-2"></i>
+                    <p class="font-semibold">게시글이 없습니다.</p>
+                    <p class="text-sm">첫 번째 글을 작성해보세요!</p>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- 푸터 (User ID) -->
+        <footer class="bg-gray-900 p-2 text-center text-xs text-gray-500 border-t border-gray-700">
+            User ID: <span id="userIdDisplay" class="font-mono">loading...</span>
+        </footer>
+
+    </div> <!-- #appContainer 끝 -->
+
+
+    <!-- 새 은어 등록/수정 모달 -->
+    <div id="wordModal" class="fixed inset-0 z-40 bg-black bg-opacity-70 flex items-center justify-center p-4 hidden">
+        <div class="bg-gray-800 w-full max-w-md p-6 rounded-lg shadow-xl relative" id="modalContent">
+            <h2 id="modalTitle" class="text-2xl font-bold mb-4 text-white">새 은어 등록</h2>
+            <form id="wordForm">
+                <input type="hidden" id="wordId">
+                
+                <div class="mb-4">
+                    <label for="wordTerm" class="block text-sm font-medium text-gray-300 mb-1">은어 <span class="text-red-400">*</span></label>
+                    <input type="text" id="wordTerm" class="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="wordDefinition" class="block text-sm font-medium text-gray-300 mb-1">뜻 <span class="text-red-400">*</span></label>
+                    <textarea id="wordDefinition" rows="3" class="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required></textarea>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="wordExample" class="block text-sm font-medium text-gray-300 mb-1">예문</label>
+                    <textarea id="wordExample" rows="2" class="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancelButton" class="px-4 py-2 bg-gray-600 text-white font-semibold rounded-md hover:bg-gray-700 transition-colors">취소</button>
+                    <button type="submit" id="saveButton" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors">저장</button>
+                </div>
+            </form>
+            <button id="closeWordModalButton" class="absolute top-4 right-4 text-gray-500 hover:text-gray-300">
+                <i data-lucide="x" class="h-6 w-6"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 새 게시글 작성 모달 -->
+    <div id="postModal" class="fixed inset-0 z-40 bg-black bg-opacity-70 flex items-center justify-center p-4 hidden">
+        <div class="bg-gray-800 w-full max-w-md p-6 rounded-lg shadow-xl relative">
+            <h2 class="text-2xl font-bold mb-4 text-white">새 글 작성</h2>
+            <form id="postForm">
+                <div class="mb-4">
+                    <label for="postTitle" class="block text-sm font-medium text-gray-300 mb-1">제목 <span class="text-red-400">*</span></label>
+                    <input type="text" id="postTitle" class="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="postContent" class="block text-sm font-medium text-gray-300 mb-1">내용 <span class="text-red-400">*</span></label>
+                    <textarea id="postContent" rows="5" class="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required></textarea>
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancelPostButton" class="px-4 py-2 bg-gray-600 text-white font-semibold rounded-md hover:bg-gray-700 transition-colors">취소</button>
+                    <button type="submit" id="savePostButton" class="px-4 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 transition-colors">등록</button>
+                </div>
+            </form>
+            <button id="closePostModalButton" class="absolute top-4 right-4 text-gray-500 hover:text-gray-300">
+                <i data-lucide="x" class="h-6 w-6"></i>
+            </button>
+        </div>
+    </div>
+
+
+    <!-- 커스텀 메시지 박스 (알림창 대용) -->
+    <div id="messageBox" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white px-6 py-3 rounded-lg shadow-xl transition-all opacity-0 translate-y-10 hidden">
+        <span id="messageText"></span>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Firebase v11.6.1
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken, 
+            onAuthStateChanged 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            setDoc, 
+            addDoc, 
+            deleteDoc, 
+            onSnapshot, 
+            collection, 
+            query,
+            serverTimestamp,
+            getDocs,
+            setLogLevel
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Config ---
+        // __firebase_config는 Canvas 환경에서 자동으로 제공됩니다.
+        let firebaseConfig;
+        try {
+            firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+            if (!firebaseConfig.apiKey) {
+                throw new Error("Firebase config is missing or invalid.");
+            }
+        } catch (e) {
+            console.error("Firebase 설정 오류:", e.message);
+            showCustomMessage("앱 설정을 불러올 수 없습니다.");
+            // config가 없으면 앱을 초기화할 수 없으므로, 비밀번호 화면에서 멈춥니다.
+            return;
+        }
+
+        // --- 전역 변수 ---
+        let app, auth, db;
+        let userId = null; // 현재 사용자 ID
+        let currentSlangTab = 'latest'; // 현재 활성화된 은어사전 탭
+        let currentMainTab = 'dictionary'; // 현재 활성화된 메인 탭
+        
+        let allWords = []; // 모든 은어 데이터 캐시
+        let allPosts = []; // 모든 게시글 데이터 캐시
+        
+        let unsubscribeWords = null; // 은어 실시간 리스너
+        let unsubscribePosts = null; // 게시판 실시간 리스너
+
+        // 비밀번호 (데모용 - 실제 서비스에서는 절대 이렇게 사용하지 마세요)
+        const DEMO_PASSWORD = "eatleeJJingJJen";
+
+        // Firestore 컬렉션 경로용 변수
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app';
+        // 공개 데이터 경로 (협업용)
+        const slangCollectionPath = `/artifacts/${appId}/public/data/slangDictionary`;
+        const boardCollectionPath = `/artifacts/${appId}/public/data/board`;
+
+        // --- DOM 요소 ---
+        const passwordScreen = document.getElementById('passwordScreen');
+        const passwordForm = document.getElementById('passwordForm');
+        const passwordInput = document.getElementById('passwordInput');
+        const passwordError = document.getElementById('passwordError');
+        const appContainer = document.getElementById('appContainer');
+
+        const headerTitle = document.getElementById('headerTitle');
+        const headerActions = document.getElementById('headerActions');
+        const addWordButton = document.getElementById('addWordButton');
+        const addPostButton = document.getElementById('addPostButton');
+        
+        const mainTabs = document.querySelectorAll('.main-tab');
+        const mainContentPanels = document.querySelectorAll('.main-content-panel');
+
+        const dictionaryContent = document.getElementById('dictionaryContent');
+        const boardContent = document.getElementById('boardContent');
+        
+        const searchInput = document.getElementById('searchInput');
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const wordList = document.getElementById('wordList');
+        const emptyState = document.getElementById('emptyState');
+        const emptyStateMessage = document.getElementById('emptyStateMessage');
+        
+        const postList = document.getElementById('postList');
+        const emptyPostState = document.getElementById('emptyPostState');
+
+        const wordModal = document.getElementById('wordModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const wordForm = document.getElementById('wordForm');
+        const wordId = document.getElementById('wordId');
+        const wordTerm = document.getElementById('wordTerm');
+        const wordDefinition = document.getElementById('wordDefinition');
+        const wordExample = document.getElementById('wordExample');
+        const cancelButton = document.getElementById('cancelButton');
+        const saveButton = document.getElementById('saveButton');
+        const closeWordModalButton = document.getElementById('closeWordModalButton');
+        
+        const postModal = document.getElementById('postModal');
+        const postForm = document.getElementById('postForm');
+        const postTitle = document.getElementById('postTitle');
+        const postContent = document.getElementById('postContent');
+        const cancelPostButton = document.getElementById('cancelPostButton');
+        const savePostButton = document.getElementById('savePostButton');
+        const closePostModalButton = document.getElementById('closePostModalButton');
+
+        const userIdDisplay = document.getElementById('userIdDisplay');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+
+
+        // --- 유틸리티 함수 ---
+
+        /**
+         * 커스텀 알림 메시지를 표시합니다.
+         * @param {string} message - 표시할 메시지
+         */
+        function showCustomMessage(message) {
+            messageText.textContent = message;
+            messageBox.classList.remove('hidden', 'opacity-0', 'translate-y-10');
+            messageBox.classList.add('opacity-100', 'translate-y-0');
+            
+            setTimeout(() => {
+                messageBox.classList.remove('opacity-100', 'translate-y-0');
+                messageBox.classList.add('opacity-0', 'translate-y-10');
+                setTimeout(() => messageBox.classList.add('hidden'), 300); // transition 후 숨김
+            }, 2500);
+        }
+
+        /**
+         * Lucide 아이콘을 DOM에 렌더링합니다.
+         */
+        function renderIcons() {
+            if (window.lucide) {
+                lucide.createIcons();
+            } else {
+                console.warn("Lucide 아이콘 라이브러리를 찾을 수 없습니다.");
+            }
+        }
+
+        /**
+         * 날짜 객체를 상대 시간 문자열로 변환 (예: "5분 전")
+         * @param {Date | object} date - Firebase Timestamp 객체 또는 Date 객체
+         */
+        function timeAgo(date) {
+            if (!date) return '날짜 정보 없음';
+            
+            // Firebase Timestamp인 경우 Date 객체로 변환
+            const dateObj = (date.toDate) ? date.toDate() : date;
+            
+            const seconds = Math.floor((new Date() - dateObj) / 1000);
+            let interval = seconds / 31536000; // 년
+            if (interval > 1) return Math.floor(interval) + "년 전";
+            interval = seconds / 2592000; // 월
+            if (interval > 1) return Math.floor(interval) + "달 전";
+            interval = seconds / 86400; // 일
+            if (interval > 1) return Math.floor(interval) + "일 전";
+            interval = seconds / 3600; // 시간
+            if (interval > 1) return Math.floor(interval) + "시간 전";
+            interval = seconds / 60; // 분
+            if (interval > 1) return Math.floor(interval) + "분 전";
+            return "방금 전";
+        }
+
+        /**
+         * 텍스트의 초성을 추출합니다. (예: "존맛탱" -> "ㅈㅁㅌ")
+         * @param {string} str - 입력 문자열
+         */
+        function getChosung(str) {
+            if (!str) return "";
+            const cho = [
+                'ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 
+                'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'
+            ];
+            let result = "";
+            for (let i = 0; i < str.length; i++) {
+                const code = str.charCodeAt(i) - 44032; // '가'의 유니코드
+                if (code >= 0 && code <= 11171) {
+                    result += cho[Math.floor(code / 588)];
+                } else {
+                    result += str.charAt(i); // 한글이 아닌 경우 그대로 추가
+                }
+            }
+            return result;
+        }
+
+        // --- 은어 사전 (Dictionary) 관련 함수 ---
+
+        /**
+         * 은어 사전 단어 카드를 생성합니다.
+         * @param {object} word - 단어 객체 (id, term, definition, example, createdBy, createdAt)
+         */
+        function createWordCard(word) {
+            const isOwner = word.createdBy === userId;
+            return `
+                <div class="bg-gray-700 p-4 rounded-lg shadow-md transition-shadow hover:shadow-lg">
+                    <div class="flex justify-between items-start">
+                        <h3 class="text-xl font-bold text-blue-300 break-all">${word.term}</h3>
+                        ${isOwner ? `
+                            <button class="delete-button text-gray-500 hover:text-red-400" data-id="${word.id}">
+                                <i data-lucide="trash-2" class="h-4 w-4"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                    <p class="text-gray-200 mt-2 break-all">${word.definition}</p>
+                    ${word.example ? `
+                        <div class="mt-3 pt-3 border-t border-gray-600">
+                            <p class="text-sm text-gray-400 italic break-all"><strong class="font-medium text-gray-300">예:</strong> ${word.example}</p>
+                        </div>
+                    ` : ''}
+                    <div class="text-xs text-gray-500 mt-3 text-right">
+                        <span>${timeAgo(word.createdAt)}</span>
+                    </div>
+                </div>
+            `;
+        }
+        
+        /**
+         * 단어 목록(allWords)을 필터링하고 정렬하여 화면에 렌더링합니다.
+         */
+        function renderWordList() {
+            const searchTerm = searchInput.value.toLowerCase();
+            let filteredWords = allWords;
+
+            // 1. 탭 필터링 (내가 쓴 글)
+            if (currentSlangTab === 'mine') {
+                filteredWords = allWords.filter(word => word.createdBy === userId);
+            }
+
+            // 2. 검색어 필터링 (단어, 초성, 뜻)
+            if (searchTerm) {
+                const searchChosung = getChosung(searchTerm);
+                filteredWords = filteredWords.filter(word => 
+                    word.term.toLowerCase().includes(searchTerm) ||
+                    word.definition.toLowerCase().includes(searchTerm) ||
+                    (word.chosung && word.chosung.includes(searchChosung))
+                );
+            }
+
+            // 3. 탭 정렬
+            let sortedWords = [...filteredWords]; // 복사본 생성
+            if (currentSlangTab === 'latest' || currentSlangTab === 'mine') {
+                // 최신순 (기본값)
+                sortedWords.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+            } else if (currentSlangTab === 'alphabetical') {
+                // 가나다순
+                sortedWords.sort((a, b) => a.term.localeCompare(b.term, 'ko-KR'));
+            }
+
+            // 4. 렌더링
+            if (sortedWords.length === 0) {
+                wordList.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                // 비어있는 이유에 따라 메시지 변경
+                if (searchTerm) {
+                    emptyStateMessage.textContent = `'${searchTerm}'에 대한 검색 결과가 없습니다.`;
+                } else if (currentSlangTab === 'mine') {
+                    emptyStateMessage.textContent = '아직 내가 쓴 글이 없습니다.';
+                } else {
+                    emptyStateMessage.textContent = '표시할 단어가 없습니다.';
+                }
+            } else {
+                emptyState.classList.add('hidden');
+                wordList.innerHTML = sortedWords.map(createWordCard).join('');
+                attachDeleteListeners();
+                renderIcons(); // 아이콘 다시 렌더링
+            }
+        }
+        
+        /**
+         * 삭제 버튼에 이벤트 리스너를 추가합니다.
+         */
+        function attachDeleteListeners() {
+            document.querySelectorAll('.delete-button').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const id = e.currentTarget.dataset.id;
+                    // (optional) 삭제 확인 커스텀 모달을 띄울 수 있습니다.
+                    // if (confirm('정말 삭제하시겠습니까?')) { ... }
+                    // 여기서는 confirm() 대신 즉시 삭제
+                    try {
+                        const wordDocRef = doc(db, slangCollectionPath, id);
+                        await deleteDoc(wordDocRef);
+                        // allWords 캐시에서도 즉시 제거 (선택적)
+                        allWords = allWords.filter(w => w.id !== id);
+                        renderWordList();
+                    } catch (error) {
+                        console.error("삭제 중 오류 발생:", error);
+                        showCustomMessage("삭제에 실패했습니다.");
+                    }
+                });
+            });
+        }
+
+        /**
+         * 은어 등록/수정 모달을 엽니다.
+         */
+        function openWordModal() {
+            // (수정 기능은 현재 구현되지 않았으므로) 폼 초기화
+            wordForm.reset();
+            wordId.value = '';
+            modalTitle.textContent = '새 은어 등록';
+            wordModal.classList.remove('hidden');
+        }
+
+        /**
+         * 은어 등록/수정 모달을 닫습니다.
+         */
+        function closeWordModal() {
+            wordModal.classList.add('hidden');
+        }
+
+        /**
+         * 은어사전 탭 변경 핸들러
+         */
+        function handleSlangTabChange(e) {
+            console.log("handleSlangTabChange: 탭 클릭됨"); // <-- 디버깅 로그 1
+            const selectedTab = e.currentTarget.dataset.tab;
+            if (selectedTab === currentSlangTab) {
+                console.log("handleSlangTabChange: 이미 활성화된 탭"); // <-- 디버깅 로그 2
+                return;
+            }
+
+            currentSlangTab = selectedTab;
+            console.log("handleSlangTabChange: 현재 탭 변경 ->", currentSlangTab); // <-- 디버깅 로그 3
+
+            // 탭 UI 변경
+            tabButtons.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.tab === selectedTab) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // 목록 다시 렌더링
+            renderWordList();
+            
+            // 탭 아이콘을 포함하여 아이콘을 다시 렌더링합니다.
+            renderIcons(); // <-- 위치 변경 (renderWordList 내부에서 여기로)
+        }
+
+        /**
+         * 은어사전 폼 제출 핸들러
+         */
+        async function handleWordFormSubmit(e) {
+            e.preventDefault();
+            const term = wordTerm.value.trim();
+            const definition = wordDefinition.value.trim();
+            const example = wordExample.value.trim();
+            
+            if (!term || !definition) {
+                showCustomMessage("은어와 뜻은 필수 항목입니다.");
+                return;
+            }
+
+            saveButton.disabled = true;
+            saveButton.textContent = '저장 중...';
+
+            try {
+                // (수정 기능은 현재 구현 X)
+                const wordData = {
+                    term,
+                    definition,
+                    example,
+                    chosung: getChosung(term), // 초성 저장
+                    createdBy: userId,
+                    createdAt: serverTimestamp() // 서버 시간 기준
+                };
+                
+                // 새 문서 추가
+                await addDoc(collection(db, slangCollectionPath), wordData);
+                
+                closeWordModal();
+            } catch (error) {
+                console.error("저장 중 오류 발생:", error);
+                showCustomMessage("저장에 실패했습니다.");
+            } finally {
+                saveButton.disabled = false;
+                saveButton.textContent = '저장';
+            }
+        }
+
+
+        // --- 자유 게시판 (Board) 관련 함수 ---
+        
+        /**
+         * 게시글 카드를 생성합니다.
+         * @param {object} post - 게시글 객체 (id, title, content, createdBy, createdAt)
+         */
+        function createPostCard(post) {
+            const isOwner = post.createdBy === userId;
+            return `
+                <div class="bg-gray-700 p-4 rounded-lg shadow-md">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-lg font-bold text-green-300 break-all">${post.title}</h3>
+                        ${isOwner ? `
+                            <button class="delete-post-button text-gray-500 hover:text-red-400" data-id="${post.id}">
+                                <i data-lucide="trash-2" class="h-4 w-4"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                    <p class="text-gray-200 text-sm break-all mb-3">${post.content}</p>
+                    <div class="text-xs text-gray-500 mt-3 flex justify-between items-center">
+                        <span class="font-mono truncate max-w-[150px]" title="작성자: ${post.createdBy}">
+                            <i data-lucide="user" class="h-3 w-3 inline-block"></i> ${post.createdBy.substring(0, 10)}...
+                        </span>
+                        <span>${timeAgo(post.createdAt)}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+         * 게시글 목록(allPosts)을 렌더링합니다. (최신순 정렬)
+         */
+        function renderPostList() {
+            let sortedPosts = [...allPosts];
+            sortedPosts.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+
+            if (sortedPosts.length === 0) {
+                postList.innerHTML = '';
+                emptyPostState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                wordList.innerHTML = sortedWords.map(createWordCard).join('');
+                attachDeleteListeners();
+                // renderIcons(); // 아이콘 다시 렌더링 <-- 여기서 제거
+            }
+            console.log("renderWordList: 렌더링 완료"); // <-- 디버깅 로그 4
+        }
+        
+        /**
+         * 게시글 삭제 버튼에 이벤트 리스너를 추가합니다.
+         */
+        function attachPostDeleteListeners() {
+            document.querySelectorAll('.delete-post-button').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const id = e.currentTarget.dataset.id;
+                    try {
+                        const postDocRef = doc(db, boardCollectionPath, id);
+                        await deleteDoc(postDocRef);
+                        allPosts = allPosts.filter(p => p.id !== id);
+                        renderPostList();
+                    } catch (error) {
+                        console.error("게시글 삭제 중 오류 발생:", error);
+                        showCustomMessage("게시글 삭제에 실패했습니다.");
+                    }
+                });
+            });
+        }
+
+        /**
+         * 게시글 작성 모달을 엽니다.
+         */
+        function openPostModal() {
+            postForm.reset();
+            postModal.classList.remove('hidden');
+        }
+
+        /**
+         * 게시글 작성 모달을 닫습니다.
+         */
+        function closePostModal() {
+            postModal.classList.add('hidden');
+        }
+
+        /**
+         * 게시글 폼 제출 핸들러
+         */
+        async function handlePostFormSubmit(e) {
+            e.preventDefault();
+            const title = postTitle.value.trim();
+            const content = postContent.value.trim();
+            
+            if (!title || !content) {
+                showCustomMessage("제목과 내용은 필수 항목입니다.");
+                return;
+            }
+
+            savePostButton.disabled = true;
+            savePostButton.textContent = '등록 중...';
+
+            try {
+                const postData = {
+                    title,
+                    content,
+                    createdBy: userId,
+                    createdAt: serverTimestamp()
+                };
+                
+                await addDoc(collection(db, boardCollectionPath), postData);
+                closePostModal();
+            } catch (error) {
+                console.error("게시글 저장 중 오류 발생:", error);
+                showCustomMessage("게시글 등록에 실패했습니다.");
+            } finally {
+                savePostButton.disabled = false;
+                savePostButton.textContent = '등록';
+            }
+        }
+
+
+        // --- 메인 (Main) 및 인증 (Auth) 관련 함수 ---
+
+        /**
+         * 메인 탭 변경 핸들러
+         */
+        function handleMainTabChange(e) {
+            const selectedTab = e.currentTarget.dataset.mainTab;
+            if (selectedTab === currentMainTab) return;
+
+            currentMainTab = selectedTab;
+
+            // 1. 메인 탭 UI 변경
+            mainTabs.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.mainTab === selectedTab) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // 2. 메인 컨텐츠 패널 변경
+            mainContentPanels.forEach(panel => {
+                panel.classList.add('hidden');
+            });
+
+            // 3. 헤더 및 액션 버튼 변경
+            if (selectedTab === 'dictionary') {
+                dictionaryContent.classList.remove('hidden');
+                headerTitle.textContent = '은어 사전';
+                addWordButton.classList.remove('hidden');
+                addPostButton.classList.add('hidden');
+            } else if (selectedTab === 'board') {
+                boardContent.classList.remove('hidden');
+                headerTitle.textContent = '자유게시판';
+                addWordButton.classList.add('hidden');
+                addPostButton.classList.remove('hidden');
+            }
+            
+            renderIcons(); // 헤더 아이콘이 바뀔 수 있으므로 다시 렌더링
+        }
+        
+        /**
+         * Firestore 실시간 리스너를 설정합니다.
+         */
+        function setupDataListeners() {
+            if (!db || !userId) return;
+
+            // 1. 은어사전 리스너
+            if (unsubscribeWords) unsubscribeWords(); // 기존 리스너 해제
+            const wordsQuery = query(collection(db, slangCollectionPath));
+            unsubscribeWords = onSnapshot(wordsQuery, (snapshot) => {
+                allWords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // 현재 은어사전 탭이 활성화된 경우에만 렌더링
+                if (currentMainTab === 'dictionary') {
+                    renderWordList();
+                }
+            }, (error) => {
+                console.error("은어사전 데이터 수신 오류:", error);
+                showCustomMessage("은어사전 데이터 로딩에 실패했습니다.");
+            });
+
+            // 2. 게시판 리스너
+            if (unsubscribePosts) unsubscribePosts(); // 기존 리스너 해제
+            const postsQuery = query(collection(db, boardCollectionPath));
+            unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
+                allPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // 현재 게시판 탭이 활성화된 경우에만 렌더링
+                if (currentMainTab === 'board') {
+                    renderPostList();
+                }
+            }, (error) => {
+                console.error("게시판 데이터 수신 오류:", error);
+                showCustomMessage("게시판 데이터 로딩에 실패했습니다.");
+            });
+        }
+        
+        /**
+         * Firebase 및 앱 초기화 (비밀번호 성공 시 호출)
+         */
+        async function initializeFirebaseAndApp() {
+            try {
+                // Firebase 앱 초기화
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                setLogLevel('Debug'); // Firestore 디버그 로그 활성화
+
+                // 인증 처리
+                // __initial_auth_token은 Canvas 환경에서 제공됩니다.
+                const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                
+                if (authToken) {
+                    await signInWithCustomToken(auth, authToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                // 인증 상태 리스너
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userIdDisplay.textContent = userId;
+                        
+                        // 데이터 리스너 설정
+                        setupDataListeners();
+                        
+                        // UI 요소에 이벤트 리스너 바인딩
+                        setupEventListeners();
+
+                        // 비밀번호 화면 숨기고 앱 컨텐츠 표시
+                        passwordScreen.classList.add('hidden');
+                        appContainer.classList.remove('hidden');
+                        
+                        // 아이콘 최종 렌더링
+                        renderIcons();
+
+                    } else {
+                        userId = null;
+                        userIdDisplay.textContent = 'Not logged in';
+                        // (필요시) 로그아웃 처리
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase 초기화 또는 인증 오류:", error);
+                passwordError.textContent = "앱 초기화에 실패했습니다. 새로고침하세요.";
+            }
+        }
+
+        /**
+         * 비밀번호 확인 핸들러
+         */
+        function handlePasswordSubmit(e) {
+            e.preventDefault();
+            const inputPassword = passwordInput.value;
+            
+            if (inputPassword === DEMO_PASSWORD) {
+                // 성공
+                passwordError.textContent = "";
+                // Firebase 초기화 및 앱 시작
+                initializeFirebaseAndApp();
+                
+            } else {
+                // 비밀번호 불일치
+                passwordError.textContent = "비밀번호가 틀렸습니다.";
+                passwordInput.value = ""; // 입력 필드 비우기
+            }
+        }
+
+        /**
+         * 모든 UI 이벤트 리스너를 설정합니다. (인증 완료 후 호출)
+         */
+        function setupEventListeners() {
+            // 메인 탭
+            mainTabs.forEach(tab => tab.addEventListener('click', handleMainTabChange));
+            console.log("setupEventListeners: 메인 탭 리스너 설정 완료"); // <-- 디버깅 로그 5
+            
+            // 은어 사전
+            addWordButton.addEventListener('click', openWordModal);
+            closeWordModalButton.addEventListener('click', closeWordModal);
+            cancelButton.addEventListener('click', closeWordModal);
+            wordForm.addEventListener('submit', handleWordFormSubmit);
+            searchInput.addEventListener('input', renderWordList);
+            tabButtons.forEach(btn => btn.addEventListener('click', handleSlangTabChange));
+            console.log("setupEventListeners: 은어사전 탭 리스너 설정 완료"); // <-- 디버깅 로그 6
+
+            // 자유 게시판
+            addPostButton.addEventListener('click', openPostModal);
+            closePostModalButton.addEventListener('click', closePostModal);
+            cancelPostButton.addEventListener('click', closePostModal);
+            postForm.addEventListener('submit', handlePostFormSubmit);
+        }
+
+        // --- 앱 시작 ---
+        
+        // 1. 비밀번호 폼 리스너 먼저 연결
+        passwordForm.addEventListener('submit', handlePasswordSubmit);
+        
+        // 2. Lucide 아이콘 초기 렌더링 (비밀번호 화면용)
+        renderIcons();
+
+    </script>
+</body>
+</html>
+
+
